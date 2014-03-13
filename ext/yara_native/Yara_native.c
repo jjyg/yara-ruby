@@ -28,7 +28,7 @@ VALUE error_CompileError = Qnil;
 VALUE error_ScanError = Qnil;
 
 void Init_yara_native() {
-  yr_init();
+  yr_initialize();
 
   module_Yara = rb_define_module("Yara");
 

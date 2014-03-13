@@ -70,11 +70,29 @@ typedef struct {
   VALUE meta;
 } match_info;
 
+static void match_info_mark(void *p)
+{
+	match_info *mi = (match_info *)p;
+	rb_gc_mark(mi->rule);
+	rb_gc_mark(mi->namespace);
+	rb_gc_mark(mi->tags);
+	rb_gc_mark(mi->strings);
+	rb_gc_mark(mi->meta);
+}
+
 typedef struct {
   VALUE offset;
   VALUE identifier;
   VALUE buffer;
 } match_string;
+
+static void match_string_mark(void *p)
+{
+	match_string *ms = (match_string *)p;
+	rb_gc_mark(ms->offset);
+	rb_gc_mark(ms->identifier);
+	rb_gc_mark(ms->buffer);
+}
 
 static VALUE 
 MatchString_NEW(int offset, char *ident, char *buf, size_t buflen) {
@@ -86,7 +104,7 @@ MatchString_NEW(int offset, char *ident, char *buf, size_t buflen) {
   if (! ms)
     rb_sys_fail("Can't allocate MatchString");
 
-  rb_ms = Data_Wrap_Struct(class_MatchString, 0, free, ms);
+  rb_ms = Data_Wrap_Struct(class_MatchString, match_string_mark, free, ms);
 
   ms->offset      = rb_iv_set(rb_ms, "@offset", INT2NUM(offset));
   ms->identifier  = rb_iv_set(rb_ms, "@identifier", 
@@ -98,23 +116,23 @@ MatchString_NEW(int offset, char *ident, char *buf, size_t buflen) {
 }
 
 int 
-Match_NEW_from_rule(RULE *rule, VALUE *match) {
+Match_NEW_from_rule(YR_RULE *rule, VALUE *match) {
   match_info *mi;
   VALUE rb_mi = Qnil;
 
-  TAG *tag;
-  STRING *string;
-  MATCH *m;
-  META *meta;
+  char *tag;
+  YR_STRING *string;
+  YR_MATCH *m;
+  YR_META *meta;
 
-  if (!(rule->flags & RULE_FLAGS_MATCH))
+  if (!(RULE_MATCHES(rule)))
     return 0;
 
   mi = (match_info *) malloc(sizeof(match_info));
   if (! mi )
     return 1;
 
-  rb_mi = Data_Wrap_Struct(class_Match, 0, free, mi);
+  rb_mi = Data_Wrap_Struct(class_Match, match_info_mark, free, mi);
 
   mi->rule      = rb_iv_set(rb_mi, "@rule", rb_obj_freeze(rb_str_new2(rule->identifier)));
   mi->namespace = rb_iv_set(rb_mi, "@namespace", rb_obj_freeze(rb_str_new2(rule->ns->name)));
@@ -122,33 +140,33 @@ Match_NEW_from_rule(RULE *rule, VALUE *match) {
   mi->strings   = rb_iv_set(rb_mi, "@strings", rb_ary_new());
   mi->meta      = rb_iv_set(rb_mi, "@meta", rb_hash_new());
 
-  tag = rule->tag_list_head;
-  while (tag) {
-    rb_ary_push(mi->tags, rb_obj_freeze(rb_str_new2(tag->identifier)));
-    tag = tag->next;
+  tag = rule->tags;
+  while (tag && strlen(tag)) {
+    rb_ary_push(mi->tags, rb_obj_freeze(rb_str_new2(tag)));
+    tag += strlen(tag) + 1;
   }
   rb_ary_sort_bang(mi->tags);
   rb_obj_freeze(mi->tags);
 
-  string = rule->string_list_head;
-  while(string) {
-    if (string->flags & STRING_FLAGS_FOUND) {
-      m = string->matches_head;
+  string = rule->strings;
+  while(!STRING_IS_NULL(string)) {
+    if (STRING_FOUND(string)) {
+      m = STRING_MATCHES(string).head;
       while (m) {
        rb_ary_push(mi->strings, 
            MatchString_NEW(m->offset, 
              string->identifier, 
-             m->data, 
+             (char*)m->data,
              m->length));
         m = m->next;
       }
     }
-    string = string->next;
+    string++;
   }
   rb_obj_freeze(mi->strings);
 
-  meta = rule->meta_list_head;
-  while(meta) {
+  meta = rule->metas;
+  while(!META_IS_NULL(meta)) {
     if (meta->type == META_TYPE_INTEGER) {
       rb_hash_aset(mi->meta, 
           rb_str_new2(meta->identifier), 
@@ -157,7 +175,7 @@ Match_NEW_from_rule(RULE *rule, VALUE *match) {
     else if (meta->type == META_TYPE_BOOLEAN) {
       rb_hash_aset(mi->meta, 
           rb_str_new2(meta->identifier), 
-          ((meta->boolean) ? Qtrue : Qfalse));
+          ((meta->integer) ? Qtrue : Qfalse));
     }
     else {
       rb_hash_aset(mi->meta, 
@@ -165,7 +183,7 @@ Match_NEW_from_rule(RULE *rule, VALUE *match) {
           rb_obj_freeze(rb_str_new2(meta->string)));
     }
 
-    meta = meta->next;
+    meta++;
   }
   rb_obj_freeze(mi->meta);
 

@@ -34,7 +34,7 @@ http://code.google.com/p/yara-project/
   end
 
 == Versioning
-The current version of libyara at the time of writing is 1.5.0. Bindings
+The current version of libyara at the time of writing is 2.0.0. Bindings
 have been written against this API and may not work with earlier versions
 of the libyara library.
 

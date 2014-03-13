@@ -31,60 +31,46 @@ describe Yara::Rules do
       @rules = Yara::Rules.new
     end
 
-    it "should indicate rules weight" do
-      @rules.weight.should be_kind_of(Numeric)
-      @rules.weight.should == 0
-    end
-
     it "should compile a file" do
       lambda { @rules.compile_file(sample_file("upx.yara")) }.should_not raise_error
-      @rules.weight.should > 0
     end
 
     it "should compile an empty file" do
       lambda { @rules.compile_file("/dev/null") }.should_not raise_error
-      @rules.weight.should == 0
     end
 
 
     it "should raise an error if compiling an invalid filename" do
       lambda { @rules.compile_file("so totally bogus a file") }.should raise_error
-      @rules.weight.should == 0
     end
 
     it "should raise an error if compiling a file with bad syntax" do
       lambda { @rules.compile_file(__FILE__) }.should raise_error(Yara::CompileError)
-      @rules.weight.should == 0
     end
 
     it "should raise an error if duplicate file data is compiled" do
       lambda { @rules.compile_file(sample_file("upx.yara")) }.should_not raise_error
       lambda { @rules.compile_file(sample_file("upx.yara")) }.should raise_error(Yara::CompileError)
-      @rules.weight.should > 0
     end
 
     it "should compile a string" do
       rules = File.read(sample_file("upx.yara"))
       lambda { @rules.compile_string(rules) }.should_not raise_error
-      @rules.weight.should > 0
     end
 
     it "should compile an empty string" do
       lambda { @rules.compile_string("") }.should_not raise_error
-      @rules.weight.should == 0
     end
 
     it "should raise an error if compiling a string with bad syntax" do
       rules = File.read(sample_file("upx.yara")) << "some bogus stuff\n"
       lambda { @rules.compile_string(rules) }.should raise_error(Yara::CompileError)
-      @rules.weight.should > 0 # it parsed everything up to the error
     end
 
     it "should raise an error if duplicate string data is compiled" do
       rules = File.read(sample_file("upx.yara"))
       lambda { @rules.compile_string(rules) }.should_not raise_error
       lambda { @rules.compile_string(rules) }.should raise_error(Yara::CompileError)
-      @rules.weight.should > 0
     end
 
     it "should indicate the current namespace" do
@@ -92,42 +78,14 @@ describe Yara::Rules do
       @rules.current_namespace.should == "default"
     end
 
-    it "should indicate all known namespaces" do
-      @rules.namespaces.should be_kind_of(Array)
-      @rules.namespaces.should == ["default"]
-    end
-
-    it "should support setting a new namespace" do
-      @rules.namespaces.should be_kind_of(Array)
-      @rules.namespaces.should == ["default"]
-
-      @rules.set_namespace("a_new_namespace").should == "a_new_namespace"
-      @rules.current_namespace.should == "a_new_namespace"
-      @rules.namespaces.should be_kind_of(Array)
-      @rules.namespaces.should == ["a_new_namespace", "default"]
-    end
-
-    it "should not create duplicate namespaces" do
-      @rules.namespaces.should be_kind_of(Array)
-      @rules.namespaces.should == ["default"]
-
-      @rules.set_namespace("a_new_namespace").should == "a_new_namespace"
-      @rules.current_namespace.should == "a_new_namespace"
-      @rules.namespaces.should be_kind_of(Array)
-      @rules.namespaces.should == ["a_new_namespace", "default"]
-
-      @rules.set_namespace("default").should == "default"
-      @rules.current_namespace.should == "default"
-      @rules.namespaces.should == ["a_new_namespace", "default"]
-
-      @rules.set_namespace("a_new_namespace").should == "a_new_namespace"
-      @rules.current_namespace.should == "a_new_namespace"
-      @rules.namespaces.should == ["a_new_namespace", "default"]
+    it "should change the current namespace when parsing to a namespace" do
+      rules = File.read(sample_file("upx.yara"))
+      @rules.compile_string(rules, "yara_ns")
+      @rules.current_namespace.should == "yara_ns"
     end
 
     it "should scan a file" do
       @rules.compile_file(sample_file("packers.yara"))
-      @rules.weight.should > 0
       results = @rules.scan_file(sample_file("DumpMem.exe"))
       results.should be_kind_of(Array)
       results.size.should == 1
@@ -163,7 +121,6 @@ describe Yara::Rules do
 
     it "should raise an error if scanning an invalid file" do
       @rules.compile_file(sample_file("packers.yara"))
-      @rules.weight.should > 0
       lambda { @rules.scan_file(sample_file("not a real file at all")) }.should raise_error(Yara::ScanError)
       lambda { @rules.scan_file(Object.new)}.should raise_error(TypeError)
       lambda { @rules.scan_file(nil)}.should raise_error(TypeError)
@@ -171,13 +128,11 @@ describe Yara::Rules do
 
     it "should raise an error if scanning a zero-length file" do
       @rules.compile_file(sample_file("packers.yara"))
-      @rules.weight.should > 0
       lambda { @rules.scan_file("/dev/null")}.should raise_error(Yara::ScanError)
     end
 
     it "should scan a string" do
       @rules.compile_file(sample_file("packers.yara"))
-      @rules.weight.should > 0
       results = @rules.scan_string(File.read(sample_file("DumpMem.exe")))
       results.should be_kind_of(Array)
       results.size.should == 1
@@ -216,7 +171,6 @@ describe Yara::Rules do
 
     it "should raise an error if scanning an invalid string" do
       @rules.compile_file(sample_file("packers.yara"))
-      @rules.weight.should > 0
       lambda { @rules.scan_string(Object.new)}.should raise_error(TypeError)
       lambda { @rules.scan_string(nil)}.should raise_error(TypeError)
     end
@@ -224,7 +178,6 @@ describe Yara::Rules do
 
     it "should take an optional namespace when compiling a file" do
       @rules.compile_file(sample_file("packers.yara"), "an_optional_namespace1" )
-      @rules.weight.should > 0
       results = @rules.scan_file(sample_file("DumpMem.exe"))
       results.should be_kind_of(Array)
       results.size.should == 1
@@ -238,13 +191,11 @@ describe Yara::Rules do
       m.namespace.should == "an_optional_namespace1"
       m.namespace.should be_frozen
 
-      @rules.namespaces.should == ["an_optional_namespace1", "default"]
-      @rules.current_namespace.should == "default"
+      #@rules.current_namespace.should == "an_optional_namespace1"
     end
 
     it "should allow the 'default' namespace when compiling a file" do
       @rules.compile_file(sample_file("packers.yara"), "default" )
-      @rules.weight.should > 0
       results = @rules.scan_file(sample_file("DumpMem.exe"))
       results.should be_kind_of(Array)
       results.size.should == 1
@@ -258,8 +209,7 @@ describe Yara::Rules do
       m.namespace.should == "default"
       m.namespace.should be_frozen
 
-      @rules.namespaces.should == ["default"]
-      @rules.current_namespace.should == "default"
+      #@rules.current_namespace.should == "default"
     end
 
     it "should raise an error when compiling a file with an invalid namespace" do
@@ -267,9 +217,8 @@ describe Yara::Rules do
     end
 
 
-    it "should take an optional namespace when compiling a string" do
+    it "should take an optional namespace and change the current namespace when compiling a string" do
       @rules.compile_string(File.read(sample_file("packers.yara")), "an_optional_namespace2")
-      @rules.weight.should > 0
       results = @rules.scan_file(sample_file("DumpMem.exe"))
       results.should be_kind_of(Array)
       results.size.should == 1
@@ -283,13 +232,11 @@ describe Yara::Rules do
       m.namespace.should == "an_optional_namespace2"
       m.namespace.should be_frozen
 
-      @rules.namespaces.should == ["an_optional_namespace2", "default"]
-      @rules.current_namespace.should == "default"
+      #@rules.current_namespace.should == "an_optional_namespace2"
     end
 
     it "should allow the 'default' namespace when compiling a string" do
       @rules.compile_string(File.read(sample_file("packers.yara")), "default")
-      @rules.weight.should > 0
       results = @rules.scan_file(sample_file("DumpMem.exe"))
       results.should be_kind_of(Array)
       results.size.should == 1
@@ -303,8 +250,7 @@ describe Yara::Rules do
       m.namespace.should == "default"
       m.namespace.should be_frozen
 
-      @rules.namespaces.should == ["default"]
-      @rules.current_namespace.should == "default"
+      #@rules.current_namespace.should == "default"
     end
 
 
